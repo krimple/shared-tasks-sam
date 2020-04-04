@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Parameters:
+  StageName:
+    Type: String
+    Default: dev
+  TaskManagerRoleName:
+    Type: CommaDelimitedList
+
+Resources:
+  HttpApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      InlineCode: |
+          def handler(event, context):
+              import json
+              return {
+                  "statusCode": 200,
+                  "body": json.dumps(event),
+              }
+      # CodeUri: "./hello_world/app.py"
+      Handler: hello_world/app.lambda_handler
+      Runtime: python3.7
+      Events:
+        ExplicitApi: # warning: creates a public endpoint
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: /path
+            TimeoutInMillis: 15000
+            PayloadFormatVersion: "2.0"
+            RouteSettings:
+              ThrottlingBurstLimit: 600
+              
+  ManageTasksAddFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      InlineCode: |
+          def handler(event, context):
+              import json
+              return {
+                  "statusCode": 200,
+                  "body": json.dumps(event),
+              }
+      # CodeUri: "./hello_world/app.py"
+      Handler: tasks-api/manage-tasks.add
+      Runtime: python3.7
+      Events:
+        ExplicitApi: # warning: creates a public endpoint
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: POST
+            Path: /tasks
+            TimeoutInMillis: 15000
+            PayloadFormatVersion: "2.0"
+
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref StageName
+
+  CognitoHttpMethodsPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      - Roles: [ !Sub "${TaskManagerRoleName}"]
+        PolicyDocument:
+          Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:List*
+              - dynamodb:DescribeReservedCapacity*
+              - dynamodb:DescribeLimits
+              - dynamodb:DescribeTimeToLive
+          - Effect: Allow
+            Action:
+              - dynamodb:BatchGet*
+              - dynamodb:DescribeStream
+              - dynamodb:DescribeTable
+              - dynamodb:Get*
+              - dynamodb:Query
+              - dynamodb:Scan
+              - dynamodb:BatchWrite*
+              - dynamodb:CreateTable
+              - dynamodb:Delete*
+              - dynamodb:Update*
+              - dynamodb:PutItem
+            Resource: Sub! "${SharedTasksTableArn}"
+
+Outputs:
+  HttpApiUrl:
+    Description: URL of your API endpoint
+    Value:
+      Fn::Sub: 'https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/'
+  HttpApiId:
+    Description: Api id of HttpApi
+    Value:
+      Ref: HttpApi

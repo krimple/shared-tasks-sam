@@ -1,0 +1,140 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: IAM Cognito and DynamoDB resources for shared-tasks-sam
+Resources:
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: devSharedTasksUserPool
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      UsernameAttributes:
+      - email
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: devSharedTaskCognitoUserPoolClient
+      GenerateSecret: true
+      UserPoolId:
+        Ref: CognitoUserPool
+      ExplicitAuthFlows:
+      - ADMIN_NO_SRP_AUTH
+  CognitoIdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    Properties:
+      IdentityPoolName: devIdentityPool
+      AllowUnauthenticatedIdentities: false
+      CognitoIdentityProviders:
+        - ClientId: !Ref CognitoUserPoolClient
+          ProviderName: !GetAtt CognitoUserPool.ProviderName
+  CognitoIdentityPoolRoles:
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+    Properties:
+      IdentityPoolId:
+        Ref: CognitoIdentityPool
+      Roles:
+        authenticated:
+          Fn::GetAtt:
+          - CognitoAuthRole
+          - Arn
+
+  SharedTasksTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+      - AttributeName: ListOwner
+        AttributeType: S
+      - AttributeName: ListDate
+        AttributeType: N
+      KeySchema:
+      - AttributeName: ListOwner
+        KeyType: HASH
+      - AttributeName: ListDate
+        KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 4
+        WriteCapacityUnits: 4
+      TableName: !Sub "${AWS::StackName}-AssignableTaskList"
+
+  CognitoAuthRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: "/"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Federated: cognito-identity.amazonaws.com
+          Action:
+          - sts:AssumeRoleWithWebIdentity
+          Condition:
+            StringEquals:
+              cognito-identity.amazonaws.com:aud:
+                Ref: CognitoIdentityPool
+            ForAnyValue:StringLike:
+              cognito-identity.amazonaws.com:amr: authenticated
+      Policies:
+        - PolicyName: 'CognitoSharedTasksTablePolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:List*
+                - dynamodb:DescribeReservedCapacity*
+                - dynamodb:DescribeLimits
+                - dynamodb:DescribeTimeToLive
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - dynamodb:BatchGet*
+                - dynamodb:DescribeStream
+                - dynamodb:DescribeTable
+                - dynamodb:Get*
+                - dynamodb:Query
+                - dynamodb:Scan
+                - dynamodb:BatchWrite*
+                - dynamodb:CreateTable
+                - dynamodb:Delete*
+                - dynamodb:Update*
+                - dynamodb:PutItem
+              Resource: arn:aws:dynamodb:*:*:table/SharedTasksTable
+
+      # - PolicyName: CognitoAuthorizedPolicy
+      #   PolicyDocument:
+      #     Version: '2012-10-17'
+      #     Statement:
+      #     - Effect: Allow
+      #       Action:
+      #       - mobileanalytics:PutEvents
+      #       - cognito-sync:*
+      #       - cognito-identity:*
+      #       Resource: "*"
+      #     - Effect: Allow
+      #       Action:
+      #       - execute-api:Invoke
+      #       Resource:
+      #         Fn::Join:
+      #         - ''
+      #         - - 'arn:aws:execute-api:'
+      #           - Ref: AWS::Region
+      #           - ":"
+      #           - Ref: AWS::AccountId
+      #           - ":"
+      #           - httpApi
+      #           - "/*"
+
+Outputs:
+  UserPool:
+    Value:
+      Ref: CognitoUserPool
+  IamUserRole:
+    Value:
+      Ref: CognitoAuthRole
+  SharedTasksTableArn:
+    Value: 
+      Fn::GetAtt: SharedTasksTable.Arn
+  # for DynamoDB Tables, the ref is the table name
+  SharedTasksTable:
+    Value:
+      Ref: SharedTasksTable
