@@ -56,7 +56,6 @@ Resources:
   AccessLogs:
     Type: AWS::Logs::LogGroup
 
-
   CognitoHttpMethodsPolicy:
     Type: AWS::IAM::Policy
     Properties:
