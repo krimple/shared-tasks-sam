@@ -1,4 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
+
 Description: IAM Cognito and DynamoDB resources for shared-tasks-sam
 Resources:
   CognitoUserPool:

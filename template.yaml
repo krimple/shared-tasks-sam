@@ -1,72 +1,69 @@
 AWSTemplateFormatVersion: '2010-09-09'
+
 Transform: AWS::Serverless-2016-10-31
 Parameters:
+  SharedTasksTableArn:
+    Type: String
   StageName:
     Type: String
     Default: dev
-  TaskManagerRoleName:
+  TaskManagerRoleNames:
     Type: CommaDelimitedList
 
 Resources:
-  HttpApiFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      InlineCode: |
-          def handler(event, context):
-              import json
-              return {
-                  "statusCode": 200,
-                  "body": json.dumps(event),
-              }
-      # CodeUri: "./hello_world/app.py"
-      Handler: hello_world/app.lambda_handler
-      Runtime: python3.7
-      Events:
-        ExplicitApi: # warning: creates a public endpoint
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApi
-            Method: GET
-            Path: /path
-            TimeoutInMillis: 15000
-            PayloadFormatVersion: "2.0"
-            RouteSettings:
-              ThrottlingBurstLimit: 600
-              
   ManageTasksAddFunction:
     Type: AWS::Serverless::Function
     Properties:
       InlineCode: |
-          def handler(event, context):
-              import json
-              return {
-                  "statusCode": 200,
-                  "body": json.dumps(event),
-              }
-      # CodeUri: "./hello_world/app.py"
+        def handler(event, context):
+            import json
+            return {
+                "statusCode": 200,
+                "body": json.dumps(event),
+            }
       Handler: tasks-api/manage-tasks.add
       Runtime: python3.7
       Events:
-        ExplicitApi: # warning: creates a public endpoint
+        AddTaskEvent: # warning: creates a public endpoint
           Type: HttpApi
           Properties:
-            ApiId: !Ref HttpApi
+            ApiId: !Ref HttpApiService
             Method: POST
             Path: /tasks
             TimeoutInMillis: 15000
             PayloadFormatVersion: "2.0"
+            RouteSettings:
+              ThrottlingBurstLimit: 600
 
-  HttpApi:
+  HttpApiService:
     Type: AWS::Serverless::HttpApi
     Properties:
+      AccessLogSettings:
+        DestinationArn: !GetAtt AccessLogs.Arn
+        Format: $context.requestId
       StageName: !Ref StageName
+      DefaultRouteSettings:
+        DataTraceEnabled: True
+        ThrottlingBurstLimit: 200
+      RouteSettings:
+        "GET /tasks":
+          ThrottlingBurstLimit: 500
+          LoggingLevel: ERROR
+        StageVariables:
+          StageVar: Value
+        FailOnWarnings: True
+
+  AccessLogs:
+    Type: AWS::Logs::LogGroup
+
 
   CognitoHttpMethodsPolicy:
     Type: AWS::IAM::Policy
     Properties:
-      - Roles: [ !Sub "${TaskManagerRoleName}"]
-        PolicyDocument:
-          Version: '2012-10-17'
+      Roles: !Sub ["${TaskManagerRoleNames}"]
+      PolicyName: TaskTableDynamoPolicy
+      PolicyDocument:
+        Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Action:
@@ -87,14 +84,15 @@ Resources:
               - dynamodb:Delete*
               - dynamodb:Update*
               - dynamodb:PutItem
-            Resource: Sub! "${SharedTasksTableArn}"
+            Resource:
+              Fn::Sub: "${SharedTasksTableArn}"
 
 Outputs:
   HttpApiUrl:
     Description: URL of your API endpoint
     Value:
-      Fn::Sub: 'https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/'
+      Fn::Sub: 'https://${HttpApiService}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/'
   HttpApiId:
     Description: Api id of HttpApi
     Value:
-      Ref: HttpApi
+      Ref: HttpApiService
