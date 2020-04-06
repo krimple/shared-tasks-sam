@@ -7,8 +7,8 @@ Parameters:
   StageName:
     Type: String
     Default: dev
-  TaskManagerRoleNames:
-    Type: CommaDelimitedList
+  TaskManagerRoleName:
+    Type: String
 
 Resources:
   ManageTasksAddFunction:
@@ -46,12 +46,9 @@ Resources:
         DataTraceEnabled: True
         ThrottlingBurstLimit: 200
       RouteSettings:
-        "GET /tasks":
+        "POST /tasks":
           ThrottlingBurstLimit: 500
           LoggingLevel: ERROR
-        StageVariables:
-          StageVar: Value
-        FailOnWarnings: True
 
   AccessLogs:
     Type: AWS::Logs::LogGroup
@@ -59,27 +56,18 @@ Resources:
   CognitoHttpMethodsPolicy:
     Type: AWS::IAM::Policy
     Properties:
-      Roles: !Sub ["${TaskManagerRoleNames}"]
+      Roles: [ !Ref TaskManagerRoleName ]
       PolicyName: TaskTableDynamoPolicy
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Action:
-              - dynamodb:List*
-              - dynamodb:DescribeReservedCapacity*
-              - dynamodb:DescribeLimits
-              - dynamodb:DescribeTimeToLive
-          - Effect: Allow
-            Action:
               - dynamodb:BatchGet*
-              - dynamodb:DescribeStream
               - dynamodb:DescribeTable
               - dynamodb:Get*
               - dynamodb:Query
               - dynamodb:Scan
-              - dynamodb:BatchWrite*
-              - dynamodb:CreateTable
               - dynamodb:Delete*
               - dynamodb:Update*
               - dynamodb:PutItem
